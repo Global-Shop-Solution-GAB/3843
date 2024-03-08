@@ -1,0 +1,202 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sdesc.Declare(String)
+V.Local.squote.Declare(String)
+V.Local.ssql.Declare(String)
+
+F.ODBC.Connection!con.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+
+F.Intrinsic.Control.If(V.Caller.Hook,=,49235)
+	F.Intrinsic.Control.CallSub(Savedescription)
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.ElseIf(V.Caller.Hook,=,10710)
+	F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-LBL-1,"HIDE",0)
+	F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-LBL-1,"LOCK",0)
+	F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-TEXT-1,"HIDE",0)
+	F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-TEXT-1,"LOCK",0)
+	
+	F.Intrinsic.Variable.SetProperty("GAB-LBL-1","PL",375)
+	F.Intrinsic.Variable.SetProperty("GAB-LBL-1","PT",511)
+	F.Intrinsic.Variable.SetProperty("GAB-TEXT-1","PL",375)
+	F.Intrinsic.Variable.SetProperty("GAB-TEXT-1","PT",528)
+	F.Intrinsic.Variable.SetProperty("GAB-TEXT-1","PW",320)
+	V.Passed.GAB-LBL-1.Set("Quote Description")
+
+	'check to see see if the switch is C if so call the setdescription sub
+	F.Intrinsic.Control.If(V.Caller.Switches,=,"C")
+		'if so call the setdescription sub
+		F.Intrinsic.Control.CallSub(Setdescription)
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ElseIf(V.Caller.Hook,=,10721)
+	F.Intrinsic.Control.CallSub(Setdescription)
+	F.Intrinsic.Control.CallSub(Unload)
+
+'quote post save hook added in modifications by WAW on 9/13/16
+F.Intrinsic.Control.ElseIf(V.Caller.Hook,=,10923)
+	V.Local.sdesc.Set(V.Passed.GAB-TEXT-1)
+	V.Local.sQuote.Set(V.Passed.000003)
+	F.Intrinsic.String.LPad(V.Local.squote,"0",7,V.Local.squote)
+	'Get Description
+	F.Intrinsic.String.Build("SELECT RFQ_DESC FROM GCG_3843_RFQ_DESC WHERE RFQ_NUMBER = '{0}'",V.Local.sQuote.Trim,V.Local.sSQL)
+	F.ODBC.Connection!con.OpenLocalRecordsetRW("rst",V.Local.sSQL)
+	F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,<>,True)
+		'update the description
+		F.ODBC.con!rst.Set!RFQ_DESC(V.Local.sdesc.Trim)
+		F.ODBC.con!rst.Update
+	F.Intrinsic.Control.Else
+		'otherwise add it to the custom table
+		F.Intrinsic.String.Build("INSERT INTO GCG_3843_RFQ_DESC VALUES('{0}','{1}')",V.Local.squote.Trim,V.Local.sDesc.Trim,V.Local.sSQL)
+		F.ODBC.Connection!con.Execute(V.Local.sSQL)
+	F.Intrinsic.Control.EndIf
+	'close the connection
+	F.ODBC.con!rst.Close
+	V.Passed.GAB-TEXT-1.Set(V.Local.sDesc.trim)
+
+'post copy quote hook
+F.Intrinsic.Control.ElseIf(V.Caller.Hook,=,35015)
+
+	V.Local.sQuote.Set(V.Passed.000001)
+	F.Intrinsic.String.LPad(V.Local.squote,"0",7,V.Local.squote)
+	'Get Description
+	F.Intrinsic.String.Build("SELECT RFQ_DESC FROM GCG_3843_RFQ_DESC WHERE RFQ_NUMBER = '{0}'",V.Local.sQuote.Trim,V.Local.sSQL)
+	F.ODBC.Connection!con.OpenLocalRecordsetRO("rst",V.Local.sSQL)
+	F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,<>,True)
+		V.Local.sdesc.Set(V.ODBC.con!rst.FieldValTrim!RFQ_DESC)
+	F.Intrinsic.Control.EndIf
+
+	V.Local.squote.Set(V.Passed.000003)
+	F.Intrinsic.String.LPad(V.Local.squote,"0",7,V.Local.squote)
+	
+	'Check to see if teh RFQ already exists.
+	F.Intrinsic.String.Build("SELECT RFQ_DESC FROM GCG_3843_RFQ_DESC WHERE RFQ_NUMBER = '{0}'",V.Local.squote.Trim,V.Local.sSQL)
+	F.ODBC.Connection!con.OpenLocalRecordsetRW("rstCheck",V.Local.ssQL)
+	
+	F.Intrinsic.Control.If(V.ODBC.con!rstCheck.EOF,<>,True)
+		F.ODBC.con!rstCheck.Set!RFQ_DESC(V.Local.sDesc)
+		F.ODBC.con!rstCheck.Update
+	F.Intrinsic.Control.Else
+		'insert the new quote and description into the table
+		F.Intrinsic.String.Build("INSERT INTO GCG_3843_RFQ_DESC VALUES('{0}','{1}')",V.Local.squote.Trim,V.Local.sDesc.Trim,V.Local.sSQL)
+		F.ODBC.Connection!con.Execute(V.Local.sSQL)
+	F.Intrinsic.Control.EndIf
+
+	'close the connection
+	F.ODBC.con!rst.Close
+	F.ODBC.con!rstCheck.Close
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3843_Add_Quote_Description.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Main.End
+
+Program.Sub.SaveDescription.Start
+F.Intrinsic.Control.SetErrorHandler("SaveDescription_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sRFQ.Declare(String)
+V.Local.sDesc.Declare(String)
+V.Local.sSQL.Declare(String)
+
+V.Local.sRFQ.Set(V.Passed.000040)
+V.Local.sDesc.Set(V.Passed.000004)
+
+'There shouldn't be any duplicates, but check just to make sure it doesn't already exist.
+F.Intrinsic.String.Build("SELECT * FROM GCG_3843_RFQ_DESC WHERE RFQ_NUMBER = '{0}'",V.Local.sRFQ,V.Local.sSQL)
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rst",V.Local.sSQL)
+
+'If no row already, insert into table.
+F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,=,True)
+	F.Intrinsic.String.Build("INSERT INTO GCG_3843_RFQ_DESC VALUES('{0}','{1}')",V.Local.sRFQ,V.Local.sDesc.PSQLFriendly,V.Local.sSQL)
+	F.ODBC.Connection!con.Execute(V.Local.sSQL)
+F.Intrinsic.Control.EndIf
+
+F.ODBC.con!rst.Close
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("SaveDescription_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3843_Add_Quote_Description.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.SaveDescription.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("Unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+F.ODBC.Connection!con.Close
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3843_Add_Quote_Description.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Unload.End
+
+Program.Sub.SetDescription.Start
+F.Intrinsic.Control.SetErrorHandler("SetDescription_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sQuote.Declare(String)
+V.Local.sSQL.Declare(String)
+V.Local.sDesc.Declare(String)
+
+'Get quote number and pad 0's
+V.Local.sQuote.Set(V.Passed.000003)
+F.Intrinsic.String.LPad(V.Local.sQuote,"0",7,V.Local.sQuote)
+
+'Get Description
+F.Intrinsic.String.Build("SELECT RFQ_DESC FROM GCG_3843_RFQ_DESC WHERE RFQ_NUMBER = '{0}'",V.Local.sQuote,V.Local.sSQL)
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rst",V.Local.sSQL)
+
+F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,<>,True)
+	V.Local.sDesc.Set(V.ODBC.con!rst.FieldValTrim!RFQ_DESC)
+F.Intrinsic.Control.EndIf
+
+F.ODBC.con!rst.Close
+V.Passed.GAB-TEXT-1.Set(V.Local.sDesc)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("SetDescription_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3843_Add_Quote_Description.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.SetDescription.End
+
+Program.Sub.Comments.Start
+${$0$}$Add Quote Description Field To Quote Header$}$BCC$}$5/5/2016 2:38:31 PM
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$This custom project will add a quote description field to the Quote Header. This field will be populated using the RFQ Description field that the quote was generated from.
+Program.Sub.Comments.End
+
